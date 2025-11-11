@@ -1,0 +1,158 @@
+# -----------------------------------------------------------
+# 🧠 Customer Churn Analysis — March 2025 to April 2025
+# Author: Venu Kumar Goud
+# -----------------------------------------------------------
+
+# 1️⃣ Import Libraries
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
+
+# -----------------------------------------------------------
+# 2️⃣ Load Dataset
+# -----------------------------------------------------------
+# 🔗 Use your corrected GitHub raw file URL
+url = "https://raw.githubusercontent.com/VenuKumar1510/VenuKumar1510-Customer-Churn-Analysis/main/data.csv"
+
+df = pd.read_csv(url)
+print("✅ Dataset loaded successfully!")
+print("Shape:", df.shape)
+print(df.head())
+
+# -----------------------------------------------------------
+# 3️⃣ Data Cleaning
+# -----------------------------------------------------------
+# Replace spaces or missing values in TotalCharges if column exists
+if 'TotalCharges' in df.columns:
+    df["TotalCharges"] = df["TotalCharges"].replace(" ", np.nan)
+    df["TotalCharges"] = pd.to_numeric(df["TotalCharges"], errors='coerce')
+    df["TotalCharges"].fillna(df["TotalCharges"].median(), inplace=True)
+
+# Drop CustomerID if present
+if 'customerID' in df.columns:
+    df.drop('customerID', axis=1, inplace=True)
+
+# -----------------------------------------------------------
+# 4️⃣ Feature Engineering
+# -----------------------------------------------------------
+# Create Tenure Bands
+def tenure_band(x):
+    if x <= 3:
+        return "0-3 months"
+    elif x <= 12:
+        return "4-12 months"
+    elif x <= 24:
+        return "1-2 years"
+    elif x <= 48:
+        return "2-4 years"
+    else:
+        return "4+ years"
+
+if 'tenure' in df.columns:
+    df["Tenure_Band"] = df["tenure"].apply(tenure_band)
+
+# Create Contract Type Buckets (if column exists)
+if 'Contract' in df.columns:
+    df["Contract_Type_Bucket"] = df["Contract"].replace({
+        "Month-to-month": "Short-Term",
+        "One year": "Mid-Term",
+        "Two year": "Long-Term"
+    })
+
+# Encode Churn Column
+if 'Churn' in df.columns:
+    df["Churn"] = df["Churn"].replace({"Yes": 1, "No": 0})
+
+# -----------------------------------------------------------
+# 5️⃣ Exploratory Data Analysis (EDA)
+# -----------------------------------------------------------
+
+print("\n📊 Basic Statistics:")
+print(df.describe(include='all'))
+
+# 1. Churn Distribution
+sns.countplot(data=df, x="Churn")
+plt.title("Churn Distribution")
+plt.show()
+
+# 2. Tenure vs Churn
+if 'tenure' in df.columns:
+    sns.boxplot(data=df, x="Churn", y="tenure")
+    plt.title("Tenure vs Churn")
+    plt.show()
+
+# 3. Monthly Charges vs Churn
+if 'MonthlyCharges' in df.columns:
+    sns.boxplot(data=df, x="Churn", y="MonthlyCharges")
+    plt.title("Monthly Charges vs Churn")
+    plt.show()
+
+# 4. Contract Type vs Churn
+if 'Contract_Type_Bucket' in df.columns:
+    sns.countplot(data=df, x="Contract_Type_Bucket", hue="Churn")
+    plt.title("Contract Type Bucket vs Churn")
+    plt.show()
+
+# 5. Heatmap for correlations
+plt.figure(figsize=(10,6))
+sns.heatmap(df.corr(numeric_only=True), annot=True, cmap="coolwarm")
+plt.title("Correlation Heatmap")
+plt.show()
+
+# -----------------------------------------------------------
+# 6️⃣ Churn Insights
+# -----------------------------------------------------------
+if 'Contract_Type_Bucket' in df.columns and 'tenure' in df.columns:
+    churned = df[df["Churn"] == 1]
+    total_churned = len(churned)
+    short_tenure_monthly = churned[
+        (churned["Contract_Type_Bucket"] == "Short-Term") &
+        (churned["tenure"] <= 3)
+    ]
+    if total_churned > 0:
+        percentage = len(short_tenure_monthly) / total_churned * 100
+        print(f"\n📉 {percentage:.2f}% of churned users were on monthly contracts with <3-month tenure.")
+        print("💡 Suggestion: Implement early engagement & retention strategies within first 3 months.")
+    else:
+        print("\nNo churned users found in dataset.")
+else:
+    print("\nSkipping churn insight analysis — columns missing.")
+
+# -----------------------------------------------------------
+# 7️⃣ Predictive Model (Logistic Regression)
+# -----------------------------------------------------------
+# Encode all categorical features
+df_encoded = df.copy()
+for col in df_encoded.select_dtypes(include=['object']):
+    le = LabelEncoder()
+    df_encoded[col] = le.fit_transform(df_encoded[col])
+
+# Check if Churn exists
+if 'Churn' in df_encoded.columns:
+    X = df_encoded.drop("Churn", axis=1)
+    y = df_encoded["Churn"]
+
+    # Split data
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+    # Logistic Regression
+    model = LogisticRegression(max_iter=1000)
+    model.fit(X_train, y_train)
+    y_pred = model.predict(X_test)
+
+    # Evaluation
+    print("\n✅ Model Evaluation")
+    print("Accuracy:", accuracy_score(y_test, y_pred))
+    print("\nClassification Report:\n", classification_report(y_test, y_pred))
+
+    # Confusion Matrix
+    sns.heatmap(confusion_matrix(y_test, y_pred), annot=True, fmt='d', cmap='Blues')
+    plt.title("Confusion Matrix")
+    plt.show()
+else:
+    print("\n⚠️ 'Churn' column missing — model training skipped.")
